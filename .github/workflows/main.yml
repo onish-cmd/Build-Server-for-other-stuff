@@ -14,7 +14,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libx11-dev libxrandr-dev libasound2-dev libpulse-dev ninja-build
+          sudo apt-get install -y libgl1-mesa-dev libx11-dev libxrandr-dev libasound2-dev libpulse-dev libdbus-1-dev ninja-build
 
       # 3. Build inside the 'engine' folder
       - name: Configure and Build
