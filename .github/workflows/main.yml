@@ -1,0 +1,39 @@
+# THIS IS AI MADE, THIS IS PUBLIC DOMAIN.
+
+name: Build rbfx for VAIO (SSE3)
+on: [workflow_dispatch] # Allows you to trigger it manually
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libx11-dev libxrandr-dev libasound2-dev libpulse-dev ninja-build
+
+      - name: Configure CMake (Targeting SSE3)
+        run: |
+          mkdir build && cd build
+          # We force SSE3 and disable higher SSE/AVX to prevent Illegal Instruction crashes
+          cmake .. -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DRBFX_EDITOR=ON \
+            -DRBFX_SAMPLES=ON \
+            -DURHO3D_SSE=3 \
+            -DCMAKE_CXX_FLAGS="-msse3 -O3" \
+            -DCMAKE_C_FLAGS="-msse3 -O3"
+
+      - name: Build
+        run: ninja -C build
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rbfx-editor-linux-sse3
+          path: build/bin/
+          
