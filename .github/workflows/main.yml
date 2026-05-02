@@ -1,39 +1,59 @@
-name: Build rbfx for VAIO (SSE3)
+name: Build rbfx for VAIO (Full + btver1)
 on: [workflow_dispatch]
 
 jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      # 1. Clone the ACTUAL rbfx engine into a folder named 'engine'
       - name: Clone rbfx Source
         run: |
+          # Cloning with submodules is critical for 'Enable Everything'
           git clone --recursive https://github.com/rbfx/rbfx.git engine
 
-      # 2. Install dependencies
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libx11-dev libxrandr-dev libasound2-dev libpulse-dev libdbus-1-dev ninja-build
+          sudo apt-get install -y \
+            libgl1-mesa-dev libx11-dev libxrandr-dev libasound2-dev \
+            libpulse-dev libdbus-1-dev ninja-build libxcursor-dev \
+            libxi-dev libxinerama-dev libxss-dev libxkbcommon-dev
 
-      # 3. Build inside the 'engine' folder
       - name: Configure and Build
         run: |
           cd engine
           mkdir build && cd build
-          # -msse3 ensures it runs on your E-350
+          
+          # ARCHITECTURE NOTES:
+          # -march=btver1: Specific to AMD Bobcat (E-350). Enables SSE4a.
+          # -O2: Better than -O3 for your limited L2 cache (prevents aggressive unrolling).
+          
           cmake .. -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DRBFX_EDITOR=ON \
             -DURHO3D_SSE=3 \
-            -DCMAKE_CXX_FLAGS="-msse3" \
-            -DCMAKE_C_FLAGS="-msse3"
+            -DRBFX_SSE=3 \
+            -DRBFX_EDITOR=ON \
+            -DRBFX_NETWORKING=ON \
+            -DRBFX_NAVIGATION=ON \
+            -DRBFX_PHYSICS=ON \
+            -DRBFX_PARTICLES=ON \
+            -DRBFX_UI=ON \
+            -DRBFX_SCRIPTING=ON \
+            -DRBFX_ASSET_DATABASE=ON \
+            -DRBFX_FILEWATCHER=ON \
+            -DRBFX_MONO=OFF \
+            -DCMAKE_CXX_FLAGS="-march=btver1 -msse3 -O2 -pipe" \
+            -DCMAKE_C_FLAGS="-march=btver1 -msse3 -O2 -pipe"
+          
           ninja
 
-      # 4. Upload the binaries
+      - name: Strip Binaries
+        # Removes debug symbols to save space on your 320GB HDD
+        run: |
+          find engine/build/bin/ -type f -executable -exec strip --strip-all {} +
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: rbfx-editor-linux-sse3
+          name: rbfx-vaio-full-btver1
           path: engine/build/bin/
           
