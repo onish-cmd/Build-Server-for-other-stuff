@@ -1,60 +1,54 @@
-name: Build Flax Engine (Legacy Architecture)
+name: Continuous Deployment for Flax (E-350 Legacy)
 
 on:
   workflow_dispatch:
 
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true # Stay suckless, opt out of tracking
+  DOTNET_ROLL_FORWARD: 'minor'
+  # Legacy Hardware Flags for AMD E-350
+  CFLAGS: "-march=btver1 -mno-sse4.1 -mno-sse4.2 -mno-avx -O2"
+  CXXFLAGS: "-march=btver1 -mno-sse4.1 -mno-sse4.2 -mno-avx -O2"
+
 jobs:
-  build-linux:
-    runs-on: ubuntu-22.04
+  package-linux-editor:
+    name: Editor (Linux Legacy)
+    runs-on: "ubuntu-24.04"
     steps:
-      - name: Checkout Flax Engine
-        uses: actions/checkout@v4
-        with:
-          repository: FlaxEngine/FlaxEngine
-          submodules: recursive
-          lfs: false 
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        repository: FlaxEngine/FlaxEngine
+        lfs: false # Still better to pull manually to avoid those 404s
 
-      - name: Install Vulkan & Dependencies
-        run: |
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list http://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
-          sudo apt-get update
-          sudo apt-get install -y vulkan-sdk libx11-dev libxcursor-dev libxinerama-dev zlib1g-dev libasound2-dev libpulse-dev
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --fix-missing libx11-dev libxcursor-dev libxinerama-dev \
+        build-essential gettext libtool libtool-bin libpulse-dev libasound2-dev \
+        libjack-dev portaudio19-dev libwayland-dev libvulkan-dev
 
-      - name: Configure for AMD E-350 (btver1)
-        run: |
-          echo "CFLAGS=-march=btver1 -mno-sse4.1 -mno-sse4.2 -mno-avx -O2" >> $GITHUB_ENV
-          echo "CXXFLAGS=-march=btver1 -mno-sse4.1 -mno-sse4.2 -mno-avx -O2" >> $GITHUB_ENV
-          echo "LDFLAGS=-fuse-ld=lld" >> $GITHUB_ENV
+    - name: Manual LFS Pull
+      run: |
+        git lfs install
+        git lfs pull || echo "Proceeding with missing assets..."
 
-      - name: Build Flax.Build Tool
-        run: |
-          # This script bootstraps the C# build tool that compiles the C++ engine
-          chmod +x GenerateProjectFiles.sh
-          ./GenerateProjectFiles.sh -linux
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
 
-      - name: Build Flax Editor
-        run: |
-          # Use the newly compiled Flax.Build tool to build the actual engine
-          # We check two common paths for the binary to be safe
-          BUILD_TOOL="Binaries/Tools/Flax.Build"
-          if [ ! -f "$BUILD_TOOL" ]; then
-            BUILD_TOOL="Source/Tools/Flax.Build/Binaries/PlatformSpecific/Linux/Flax.Build"
-          fi
-          
-          chmod +x "$BUILD_TOOL"
-          ./$BUILD_TOOL -build -platform=Linux -arch=x64 -configuration=Development -buildTargets=FlaxEditor
+    - name: Build Legacy Editor
+      run: |
+        chmod +x PackageEditor.sh
+        # We tell the script to use .NET 8 and build for Linux
+        # The environment variables CFLAGS/CXXFLAGS will be picked up by the compiler
+        ./PackageEditor.sh -arch=x64 -platform=Linux -deployOutput=Output -dotnet=8
 
-      - name: Package Binaries
-        run: |
-          mkdir -p flax-legacy-build
-          cp -r Binaries/ flax-legacy-build/
-          cp -r Content/ flax-legacy-build/
-          tar -czvf flax-linux-e350.tar.gz flax-legacy-build/
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: flax-engine-e350
-          path: flax-linux-e350.tar.gz
-          
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Linux-Editor-E350
+        path: Output/FlaxEditorLinux.zip
+        
