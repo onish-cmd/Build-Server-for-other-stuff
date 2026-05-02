@@ -14,17 +14,14 @@ jobs:
           submodules: recursive
           lfs: false 
 
-      - name: Setup Vulkan SDK
-        uses: lukka/get-vulkan-sdk@v1
-        with:
-          vulkan_query_version: 1.3.239.0
-          vulkan_components: Vulkan-Headers, Vulkan-Loader
-
-      - name: Install Dependencies
+      - name: Install Vulkan SDK (Manual Way)
         run: |
+          # Add LunarG signing key and repo for 2026 compatibility
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list http://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
-          sudo apt-get install -y clang lld git-lfs libx11-dev libxcursor-dev \
-          libxinerama-dev zlib1g-dev libvulkan-dev libasound2-dev libpulse-dev
+          # Install the full SDK plus standard Linux dev headers
+          sudo apt-get install -y vulkan-sdk libx11-dev libxcursor-dev libxinerama-dev zlib1g-dev libasound2-dev libpulse-dev
 
       - name: Manually Pull Current LFS
         run: |
@@ -36,16 +33,18 @@ jobs:
           echo "CFLAGS=-march=btver1 -mno-sse4.1 -mno-sse4.2 -mno-avx -O2" >> $GITHUB_ENV
           echo "CXXFLAGS=-march=btver1 -mno-sse4.1 -mno-sse4.2 -mno-avx -O2" >> $GITHUB_ENV
           echo "LDFLAGS=-fuse-ld=lld" >> $GITHUB_ENV
+          # Point Flax to the Vulkan SDK location manually just in case
+          echo "VULKAN_SDK=/usr" >> $GITHUB_ENV
 
       - name: Generate Project Files (Linux Only)
         run: |
           chmod +x GenerateProjectFiles.sh
-          # We force it to focus on Linux to ignore missing Android/Web SDKs
+          # Build only for Linux to avoid Android/Web SDK errors
           ./GenerateProjectFiles.sh -linux
 
       - name: Build Flax Editor
         run: |
-          # Ensure the build tool was actually created and is executable
+          # The build tool is generated in this specific path
           chmod +x Source/Tools/Flax.Build/Binaries/PlatformSpecific/Linux/Flax.Build
           ./Source/Tools/Flax.Build/Binaries/PlatformSpecific/Linux/Flax.Build \
           -build -platform=Linux -arch=x64 -configuration=Development
