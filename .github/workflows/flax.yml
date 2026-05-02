@@ -12,20 +12,24 @@ jobs:
         with:
           repository: FlaxEngine/FlaxEngine
           submodules: recursive
-          lfs: false # Disable automatic LFS to avoid 404 errors
+          lfs: false 
+
+      - name: Setup Vulkan SDK
+        uses: lukka/get-vulkan-sdk@v1
+        with:
+          vulkan_query_version: 1.3.239.0
+          vulkan_components: Vulkan-Headers, Vulkan-Loader
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y clang lld git-lfs libx11-dev libxcursor-dev \
-          libxinerama-dev zlib1g-dev vulkan-tools libvulkan-dev
+          libxinerama-dev zlib1g-dev libvulkan-dev libasound2-dev libpulse-dev
 
       - name: Manually Pull Current LFS
         run: |
           git lfs install
-          # We pull only what is needed for the current checkout
-          # this avoids the history-based 404 objects
-          git lfs pull || echo "Some LFS objects missing, proceeding anyway..."
+          git lfs pull || echo "Proceeding with missing objects..."
 
       - name: Configure for AMD E-350 (btver1)
         run: |
@@ -33,18 +37,22 @@ jobs:
           echo "CXXFLAGS=-march=btver1 -mno-sse4.1 -mno-sse4.2 -mno-avx -O2" >> $GITHUB_ENV
           echo "LDFLAGS=-fuse-ld=lld" >> $GITHUB_ENV
 
-      - name: Generate Project Files
-        run: ./GenerateProjectFiles.sh
+      - name: Generate Project Files (Linux Only)
+        run: |
+          chmod +x GenerateProjectFiles.sh
+          # We force it to focus on Linux to ignore missing Android/Web SDKs
+          ./GenerateProjectFiles.sh -linux
 
       - name: Build Flax Editor
         run: |
+          # Ensure the build tool was actually created and is executable
+          chmod +x Source/Tools/Flax.Build/Binaries/PlatformSpecific/Linux/Flax.Build
           ./Source/Tools/Flax.Build/Binaries/PlatformSpecific/Linux/Flax.Build \
           -build -platform=Linux -arch=x64 -configuration=Development
 
       - name: Package Binaries
         run: |
           mkdir -p flax-legacy-build
-          # Copying only the essentials to keep the artifact size down
           cp -r Binaries/ flax-legacy-build/
           cp -r Content/ flax-legacy-build/
           tar -czvf flax-linux-e350.tar.gz flax-legacy-build/
@@ -54,4 +62,3 @@ jobs:
         with:
           name: flax-engine-e350
           path: flax-linux-e350.tar.gz
-          
