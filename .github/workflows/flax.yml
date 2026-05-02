@@ -1,0 +1,52 @@
+name: Build Flax Engine (Legacy Architecture)
+
+on:
+  workflow_dispatch: # Allows you to trigger it manually from the "Actions" tab
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04 # High-end build server
+    steps:
+      - name: Checkout Flax Engine
+        uses: actions/checkout@v4
+        with:
+          repository: FlaxEngine/FlaxEngine
+          submodules: recursive
+          lfs: true # Crucial for game engines
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld git-lfs libx11-dev libxcursor-dev \
+          libxinerama-dev zlib1g-dev vulkan-tools libvulkan-dev
+
+      - name: Configure for AMD E-350 (btver1)
+        run: |
+          # The Secret Sauce: march=btver1 targets your specific CPU
+          # We disable SSE4.1/4.2 and AVX so it doesn't crash on your VAIO
+          echo "CFLAGS=-march=btver1 -mno-sse4.1 -mno-sse4.2 -mno-avx -O2" >> $GITHUB_ENV
+          echo "CXXFLAGS=-march=btver1 -mno-sse4.1 -mno-sse4.2 -mno-avx -O2" >> $GITHUB_ENV
+          echo "LDFLAGS=-fuse-ld=lld" >> $GITHUB_ENV
+
+      - name: Generate Project Files
+        run: ./GenerateProjectFiles.sh
+
+      - name: Build Flax Editor
+        run: |
+          # Building in Release/Development mode for Linux
+          # Headless mode ensures the build server doesn't try to open a window
+          ./Source/Tools/Flax.Build/Binaries/PlatformSpecific/Linux/Flax.Build \
+          -build -platform=Linux -arch=x64 -configuration=Development
+
+      - name: Package Binaries
+        run: |
+          mkdir -p flax-legacy-build
+          cp -r Binaries/ flax-legacy-build/
+          cp -r Content/ flax-legacy-build/
+          tar -czvf flax-linux-e350.tar.gz flax-legacy-build/
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flax-engine-e350
+          path: flax-linux-e350.tar.gz
